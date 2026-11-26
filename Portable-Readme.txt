@@ -11,4 +11,6 @@ Codex 图片压缩 · Windows 便携版
 
 程序在本机压缩，原图保留。输出写入 Windows 临时目录。程序只在当前 Windows 登录期间运行，重启后需要再次双击启动。网页端、右键粘贴和 Codex 的附件选择器不在自动处理范围内。
 
+独立 EXE 支持 JPEG、PNG、WebP、GIF、BMP 和 TIFF 等常用格式。AVIF 可使用源码版处理。
+
 第三方许可与版权信息见 Licenses 文件夹。

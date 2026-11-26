@@ -1,13 +1,15 @@
 """Prepare image pastes and Explorer drops for the Windows Codex app."""
 
 import sys
-import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
 from ctypes import POINTER, Structure, WINFUNCTYPE, WinError, cast, get_last_error, set_last_error, wintypes
 from dataclasses import dataclass
 from threading import Event
 from time import monotonic
-from tkinter import messagebox
+
+import win32con
+import win32event
+import win32gui
 
 from PIL import ImageGrab
 
@@ -98,10 +100,8 @@ def handle_paste(owner_window: int, request: PasteRequest, gesture: int, cancell
 
 
 class SmartPaste:
-    def __init__(self, root, stop_handle):
-        self.root = root
+    def __init__(self, stop_handle):
         self.stop_handle = stop_handle
-        self.owner = root.winfo_id()
         self.png_format = clipboard_api.RegisterClipboardFormatW("PNG")
         self.callback = HookProc(self.on_key)
         self.hook = None
@@ -118,11 +118,10 @@ class SmartPaste:
         self.hook = user.SetWindowsHookExW(WH_KEYBOARD_LL, self.callback, core.GetModuleHandleW(None), 0)
         if not self.hook:
             raise WinError(get_last_error())
-        self.root.after(12, self.tick)
 
     def report_drop_error(self, detail):
         if foreground_codex() and not self.cancelled.is_set():
-            messagebox.showwarning("Codex 图片拖放", f"这批文件未能自动添加。\n\n{detail}", parent=self.root)
+            win32gui.MessageBox(0, f"这批文件未能自动添加。\n\n{detail}", "Codex 图片拖放", win32con.MB_ICONWARNING)
 
     def on_key(self, code, message, address):
         if code == 0:
@@ -156,8 +155,7 @@ class SmartPaste:
             self.cancelled.set()
             self.pending = None
             if self.job is None or self.job.done():
-                self.root.quit()
-                return
+                return False
 
         if self.job is not None and self.job.done():
             job, self.job = self.job, None
@@ -165,7 +163,7 @@ class SmartPaste:
                 job.result()
             except (OSError, ValueError, RuntimeError) as error:
                 if foreground_codex() == self.job_target and not self.cancelled.is_set():
-                    messagebox.showwarning("Codex 图片粘贴", f"这批图片未能自动粘贴。\n\n{error}", parent=self.root)
+                    win32gui.MessageBox(0, f"这批图片未能自动粘贴。\n\n{error}", "Codex 图片粘贴", win32con.MB_ICONWARNING)
 
         if self.pending is not None:
             if monotonic() - self.pending.accepted > 4 or user.GetForegroundWindow() != self.pending.window:
@@ -173,11 +171,13 @@ class SmartPaste:
             elif not self.suppress_v and not any(map(key_down, PASTE_KEYS)):
                 request, self.pending = self.pending, None
                 self.job_target = request.window
-                self.job = self.executor.submit(handle_paste, self.owner, request, last_input(), self.cancelled)
+                self.job = self.executor.submit(
+                    handle_paste, self.drag.window, request, last_input(), self.cancelled
+                )
 
         if self.drag is not None and not self.cancelled.is_set():
             self.drag.tick()
-        self.root.after(12, self.tick)
+        return True
 
     def close(self):
         self.cancelled.set()
@@ -197,36 +197,33 @@ def listen(announce: bool = False, *, startup_check: bool = False):
         core.CloseHandle(ready_handle)
         return 0
     stop_handle = None
-    root = None
     listener = None
     try:
         stop_handle = core.CreateEventW(None, True, False, None if startup_check else STOP)
         if not stop_handle:
             raise WinError(get_last_error())
         user.SetProcessDpiAwarenessContext(-4)
-        root = tk.Tk()
-        root.withdraw()
-        root.update_idletasks()
-        listener = SmartPaste(root, stop_handle)
+        listener = SmartPaste(stop_handle)
         listener.install()
         if not core.SetEvent(ready_handle):
             raise WinError(get_last_error())
         if announce:
-            root.after_idle(lambda: messagebox.showinfo(
-                "Codex 图片压缩",
+            win32gui.MessageBox(
+                0,
                 "自动压缩已启动。\n\n在 Codex 输入框按 Ctrl+V，或从资源管理器直接拖入图片。"
                 "\n\n再次打开本程序可以停止自动压缩。",
-                parent=root,
-            ))
-        if startup_check:
-            root.after(100, root.quit)
-        root.mainloop()
+                "Codex 图片压缩",
+                win32con.MB_ICONINFORMATION,
+            )
+        deadline = monotonic() + 0.1 if startup_check else None
+        while not win32gui.PumpWaitingMessages() and listener.tick():
+            if deadline is not None and monotonic() >= deadline:
+                break
+            win32event.MsgWaitForMultipleObjects((), False, 12, win32con.QS_ALLINPUT)
         return 0
     finally:
         if listener is not None:
             listener.close()
-        if root is not None:
-            root.destroy()
         if stop_handle:
             core.CloseHandle(stop_handle)
         core.CloseHandle(ready_handle)
@@ -259,9 +256,11 @@ def control(stop: bool) -> int:
 def launch_portable() -> int:
     if control(stop=False) != 0:
         return listen(announce=True)
-    if messagebox.askyesno(
-        "Codex 图片压缩", "自动压缩正在运行。是否停止？", default=messagebox.NO
-    ):
+    answer = win32gui.MessageBox(
+        0, "自动压缩正在运行。是否停止？", "Codex 图片压缩",
+        win32con.MB_YESNO | win32con.MB_DEFBUTTON2 | win32con.MB_ICONQUESTION,
+    )
+    if answer == win32con.IDYES:
         return control(stop=True)
     return 0
 

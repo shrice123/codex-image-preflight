@@ -13,6 +13,11 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parent
 EXECUTABLE = "Codex-Image-Prep-Windows-x64.exe"
+EXE_SIZE_LIMIT = 10_000_000
+EXCLUDED_MODULES = (
+    "tkinter", "PIL.ImageTk", "PIL.AvifImagePlugin", "PIL._avif",
+    "ssl", "_hashlib", "win32ui",
+)
 
 
 def collect_licenses(destination: Path) -> None:
@@ -48,13 +53,18 @@ def build(output: Path) -> None:
         subprocess.run(
             [
                 sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed",
-                "--noupx", "--name", executable.stem, "--distpath", str(output),
+                "--noupx", "--optimize", "2", "--name", executable.stem, "--distpath", str(output),
+                *[argument for module in EXCLUDED_MODULES for argument in ("--exclude-module", module)],
                 "--specpath", str(folder), "--workpath", str(folder / "work"),
                 "--add-data", f"{licenses}:Licenses", str(ROOT / "smart_paste.py"),
             ],
             cwd=ROOT,
             check=True,
         )
+        size = executable.stat().st_size
+        if size > EXE_SIZE_LIMIT:
+            raise RuntimeError(f"EXE is {size:,} bytes. Release limit: {EXE_SIZE_LIMIT:,} bytes.")
+        print(f"Standalone EXE: {size:,} bytes", flush=True)
         subprocess.run([str(executable), "--self-test"], check=True, timeout=40)
         portable = output / f"{executable.stem}.zip"
         with ZipFile(portable, "w", compression=ZIP_DEFLATED) as bundle:
