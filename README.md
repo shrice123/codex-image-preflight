@@ -1,9 +1,20 @@
 # Codex 图片附件压缩
 
-## Windows 便携版
+## 从源码启动
 
-从 [GitHub Releases](https://github.com/shrice123/codex-image-preflight/releases/latest) 下载 `Codex-Image-Prep-Windows-x64.zip`。完整解压后双击 `Codex Image Prep.exe` 即可启动，无需安装 Python。再次双击可停止。支持 Windows x64 上的 Codex 桌面客户端。
+适用于 64 位 Windows 上的 Codex 桌面客户端。先安装 64 位 Python 3.11，然后从 GitHub 的 **Code → Download ZIP** 下载源码并解压。在解压出的目录打开 PowerShell，运行以下命令。
 
+```powershell
+py -3.11 -m pip install Pillow==12.3.0 pywin32==312
+py -3.11 -B smart_paste.py
+```
+
+保持启动窗口打开。回到 Codex，按 **Ctrl+V** 粘贴截图或图片文件，也可以从资源管理器拖入图片。缩略图出现后即可发送。要查询状态或退出，在同一目录打开另一个 PowerShell 窗口，运行相应命令。
+
+```powershell
+py -3.11 -B smart_paste.py --status
+py -3.11 -B smart_paste.py --stop
+```
 
 ## 自动压缩试用
 
