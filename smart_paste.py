@@ -1,4 +1,4 @@
-"""Prepare image pastes and Explorer drops for the Windows Codex app."""
+"""Prepare image attachments for the Windows Codex app."""
 
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +18,7 @@ from windows_clipboard import CF_HDROP, clipboard_owner, sequence, user as clipb
 from windows_drag import ExplorerDropLayer
 from windows_paste import PASTE_KEYS, PASTE_MARKER, VK_CONTROL, core, foreground_codex, last_input
 from windows_paste import paste_files, press_paste, user
+from windows_picker import FilePicker
 
 
 READY = r"Local\CodexImagePrep.SmartPaste.Ready"
@@ -25,6 +26,7 @@ STOP = r"Local\CodexImagePrep.SmartPaste.Stop"
 ERROR_ALREADY_EXISTS = 183
 
 WH_KEYBOARD_LL = 13
+WH_MOUSE_LL = 14
 VK_V = ord("V")
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
@@ -35,6 +37,13 @@ LLKHF_INJECTED = 0x10
 class KeyboardEvent(Structure):
     _fields_ = [
         ("key", wintypes.DWORD), ("scan", wintypes.DWORD), ("flags", wintypes.DWORD),
+        ("time", wintypes.DWORD), ("extra", wintypes.WPARAM),
+    ]
+
+
+class MouseEvent(Structure):
+    _fields_ = [
+        ("point", wintypes.POINT), ("data", wintypes.DWORD), ("flags", wintypes.DWORD),
         ("time", wintypes.DWORD), ("extra", wintypes.WPARAM),
     ]
 
@@ -103,7 +112,9 @@ class SmartPaste:
         self.stop_handle = stop_handle
         self.png_format = clipboard_api.RegisterClipboardFormatW("PNG")
         self.callback = HookProc(self.on_key)
+        self.mouse_callback = HookProc(self.on_mouse)
         self.hook = None
+        self.mouse_hook = None
         self.drag = None
         self.pending = None
         self.suppress_v = False
@@ -111,11 +122,16 @@ class SmartPaste:
         self.job_target = None
         self.cancelled = Event()
         self.executor = ThreadPoolExecutor(max_workers=1)
+        self.picker = FilePicker(self.executor)
 
     def install(self):
         self.drag = ExplorerDropLayer(self.report_drop_error)
-        self.hook = user.SetWindowsHookExW(WH_KEYBOARD_LL, self.callback, core.GetModuleHandleW(None), 0)
+        module = core.GetModuleHandleW(None)
+        self.hook = user.SetWindowsHookExW(WH_KEYBOARD_LL, self.callback, module, 0)
         if not self.hook:
+            raise WinError(get_last_error())
+        self.mouse_hook = user.SetWindowsHookExW(WH_MOUSE_LL, self.mouse_callback, module, 0)
+        if not self.mouse_hook:
             raise WinError(get_last_error())
 
     def report_drop_error(self, detail):
@@ -125,6 +141,8 @@ class SmartPaste:
     def on_key(self, code, message, address):
         if code == 0:
             event = cast(address, POINTER(KeyboardEvent)).contents
+            if not self.cancelled.is_set() and self.picker.key(message, event.key):
+                return 1
             if event.key == VK_V and not (event.flags & LLKHF_INJECTED and event.extra == PASTE_MARKER):
                 if message in (WM_KEYUP, WM_SYSKEYUP) and self.suppress_v:
                     self.suppress_v = False
@@ -135,6 +153,14 @@ class SmartPaste:
                     if self.try_capture():
                         self.suppress_v = True
                         return 1
+        return user.CallNextHookEx(None, code, message, address)
+
+    def on_mouse(self, code, message, address):
+        if code == 0 and message in (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP):
+            if not self.cancelled.is_set():
+                point = cast(address, POINTER(MouseEvent)).contents.point
+                if self.picker.mouse(message, (point.x, point.y)):
+                    return 1
         return user.CallNextHookEx(None, code, message, address)
 
     def try_capture(self):
@@ -176,12 +202,15 @@ class SmartPaste:
 
         if self.drag is not None and not self.cancelled.is_set():
             self.drag.tick()
+            self.picker.tick()
         return True
 
     def close(self):
         self.cancelled.set()
         if self.hook:
             user.UnhookWindowsHookEx(self.hook)
+        if self.mouse_hook:
+            user.UnhookWindowsHookEx(self.mouse_hook)
         if self.drag is not None:
             self.drag.close()
         self.executor.shutdown(wait=True, cancel_futures=True)
@@ -209,7 +238,7 @@ def listen(announce: bool = False, *, startup_check: bool = False):
         if announce:
             win32gui.MessageBox(
                 0,
-                "自动压缩已启动。\n\n在 Codex 输入框按 Ctrl+V，或从资源管理器直接拖入图片。"
+                "自动压缩已启动。\n\n可在 Codex 中粘贴、拖入图片，或通过「＋ → 文件和文件夹」添加。"
                 "\n\n再次打开本程序可以停止自动压缩。",
                 "Codex 图片压缩",
                 win32con.MB_ICONINFORMATION,
