@@ -2,7 +2,7 @@ Codex 图片压缩 · Windows 便携版
 
 适用于 64 位 Windows 上的 Codex 桌面客户端。无需安装 Python。
 
-1. 将 ZIP 完整解压到本地，再双击 Codex Image Prep.exe。
+1. 下载 EXE 后直接双击。若下载的是 ZIP，先完整解压，再双击 Codex-Image-Prep-Windows-x64.exe。
 2. 看到“自动压缩已启动”后，点确定，照常使用 Codex。
 3. 截图或复制图片后在 Codex 输入框按 Ctrl+V。也可以从 Windows 资源管理器直接拖入普通本地图片文件。
 4. 等附件缩略图出现，再按平常方式发送消息。需要停止时，再次双击同一个 EXE，并确认停止。

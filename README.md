@@ -1,45 +1,34 @@
 # Codex 图片附件压缩
 
-## 从源码启动
+**[下载 Windows x64 版 EXE](https://github.com/shrice123/codex-image-preflight/releases/latest/download/Codex-Image-Prep-Windows-x64.exe)**
 
-适用于 64 位 Windows 上的 Codex 桌面客户端。先安装 64 位 Python 3.11，然后从 GitHub 的 **Code → Download ZIP** 下载源码并解压。在解压出的目录打开 PowerShell，运行以下命令。
+下载后双击 `Codex-Image-Prep-Windows-x64.exe`，看到启动提示即可回到 Codex。无需安装 Python，也无需解压。再次双击同一个 EXE，确认后停止。[查看版本、ZIP 和校验值](https://github.com/shrice123/codex-image-preflight/releases/latest)
+
+## 日常使用
+
+- 在 Windows Codex 桌面端按 **Ctrl+V** 粘贴截图或图片文件，也可以把本地图片从资源管理器直接拖到输入框。看到缩略图后照常发送。
+- 同一条消息有多张图时，建议一次选中一起粘贴或拖入。单张图片最多 99,999 字节，整批图片的 Base64 长度加上估算的附件开销最多 200,000 字节。分几次添加时，每批独立计算。正文和历史上下文也占完整请求的空间。
+- 压缩在本机完成，原图保留，压缩后的文件写入 Windows 临时目录。工具重启后需要重新双击启动。
+- 自动处理覆盖 Codex 输入框的 **Ctrl+V** 和资源管理器拖放。普通文本粘贴、其他应用、右键粘贴和 Codex 的附件选择器继续按原有方式工作。
+
+## 从源码运行
+
+安装 Windows x64 Python 3.11 后，在源码目录打开 PowerShell。
 
 ```powershell
 py -3.11 -m pip install Pillow==12.3.0 pywin32==312
 py -3.11 -B smart_paste.py
 ```
 
-保持启动窗口打开。回到 Codex，按 **Ctrl+V** 粘贴截图或图片文件，也可以从资源管理器拖入图片。缩略图出现后即可发送。要查询状态或退出，在同一目录打开另一个 PowerShell 窗口，运行相应命令。
+保持窗口打开。可以另开 PowerShell，在同一目录执行 `py -3.11 -B smart_paste.py --status` 查询状态，或执行 `py -3.11 -B smart_paste.py --stop` 停止。
+
+源码目录也提供 `image_prep.py` 的手动批量压缩界面。运行 `Install-Shortcut.ps1` 可创建该界面的桌面快捷方式。
+
+## 构建 Windows EXE
 
 ```powershell
-py -3.11 -B smart_paste.py --status
-py -3.11 -B smart_paste.py --stop
+py -3.11 -m pip install -r requirements-build.txt
+py -3.11 build_windows.py dist
 ```
 
-## 自动压缩试用
-
-试用进程运行时，在 Codex 输入框正常按 **Ctrl+V**，剪贴板里的截图或从资源管理器一次复制的多张图片会自动压缩后贴入。从 Windows 资源管理器直接拖入图片，也会在原落点自动添加压缩后的文件。一次粘贴或一次拖放算一批。看到附件缩略图后即可发送。
-
-普通文本粘贴、附件选择器、右键粘贴和其他应用继续走原有流程。拖放支持资源管理器中的普通本地文件。
-
-这次试用仅运行在当前 Windows 登录期间。在工具目录运行 `python -B smart_paste.py --status` 可查询状态，运行 `python -B smart_paste.py --stop` 可退出。
-
-## 桌面快捷方式
-
-在 Windows 的任意 Codex 会话中，可用一个快捷键把剪贴板里的图片压缩并贴到输入框。看到附件缩略图后，照常发送。
-
-1. 把截图复制到剪贴板，或在资源管理器多选图片后按 **Ctrl+C**。
-2. 把光标放在当前 Codex 输入框，按 **Ctrl+Alt+Shift+I**，等图片缩略图出现。压缩期间切换窗口、更新剪贴板或继续操作键鼠会取消自动粘贴，可再次按快捷键。
-3. 确认附件，再发送消息。同一条消息的图片一次多选，可按整批大小动态分配空间。
-
-如果需要把多张分别复制的截图合成一批，双击桌面 **Codex Image Prep**，陆续点 **添加剪贴板图片**，再点 **压缩这批图片**。此窗口也支持 **选择图片**。如果当前客户端未识别自动粘贴，可从这个窗口点 **打开附件目录**，全选后拖入。
-
-## 大小与文件
-
-- 单张输出最多 99,999 字节。整批按每张 Base64 编码后的长度加 128 字节估算，最高 200,000 字节。图片多时，较小的图保留空间，多余预算分配给较大的图。
-- 超出预算时会重新编码或缩小尺寸。PNG 和 JPEG 在满足限额时可以原样复制。转成 JPEG 的透明区域使用白底，多帧图片取第一帧。
-- 程序在本地处理，原图保留，输出在 Windows 临时目录。自动粘贴后会恢复原剪贴板。如果此时另有程序写入剪贴板，会保留更新的内容。200,000 字节约束该批图片的编码估算，完整请求还会计入历史上下文、正文和其他数据。
-
-## 快捷方式维护
-
-若需要重建快捷方式，在此目录运行 `Install-Shortcut.ps1`。本工具使用 Python 3.11、Tkinter 和 Pillow，自动拖放入口还使用 pywin32。删除桌面 **Codex Image Prep** 快捷方式即可移除热键。
+构建脚本检查 EXE 能否启动 Windows 监听器，并输出 EXE、ZIP 和 SHA-256 校验文件。第三方许可随 EXE 和 ZIP 一起分发。

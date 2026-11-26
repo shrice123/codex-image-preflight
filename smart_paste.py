@@ -188,9 +188,9 @@ class SmartPaste:
         self.executor.shutdown(wait=True, cancel_futures=True)
 
 
-def listen(announce: bool = False):
+def listen(announce: bool = False, *, startup_check: bool = False):
     set_last_error(0)
-    ready_handle = core.CreateEventW(None, True, False, READY)
+    ready_handle = core.CreateEventW(None, True, False, None if startup_check else READY)
     if not ready_handle:
         raise WinError(get_last_error())
     if get_last_error() == ERROR_ALREADY_EXISTS:
@@ -200,7 +200,7 @@ def listen(announce: bool = False):
     root = None
     listener = None
     try:
-        stop_handle = core.CreateEventW(None, True, False, STOP)
+        stop_handle = core.CreateEventW(None, True, False, None if startup_check else STOP)
         if not stop_handle:
             raise WinError(get_last_error())
         user.SetProcessDpiAwarenessContext(-4)
@@ -218,6 +218,8 @@ def listen(announce: bool = False):
                 "\n\n再次打开本程序可以停止自动压缩。",
                 parent=root,
             ))
+        if startup_check:
+            root.after(100, root.quit)
         root.mainloop()
         return 0
     finally:
@@ -266,6 +268,8 @@ def launch_portable() -> int:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args == ["--self-test"]:
+        sys.exit(listen(startup_check=True))
     if args in (["--status"], ["--stop"]):
         sys.exit(control(stop=args == ["--stop"]))
     if args:
