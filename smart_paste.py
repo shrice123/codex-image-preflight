@@ -45,7 +45,6 @@ user.SetWindowsHookExW.restype = wintypes.HANDLE
 user.CallNextHookEx.argtypes = [wintypes.HANDLE, wintypes.INT, wintypes.WPARAM, wintypes.LPARAM]
 user.CallNextHookEx.restype = wintypes.LPARAM
 user.UnhookWindowsHookEx.argtypes = [wintypes.HANDLE]
-clipboard_api.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
 core.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 core.GetModuleHandleW.restype = wintypes.HMODULE
 core.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]

@@ -1,7 +1,7 @@
 """Copy actual file references on Windows, using the Explorer clipboard format."""
 
 from contextlib import contextmanager
-from ctypes import WinDLL, WinError, get_last_error, memmove, set_last_error
+from ctypes import WinDLL, WinError, create_unicode_buffer, get_last_error, memmove, set_last_error
 from ctypes import wintypes
 from pathlib import Path
 from struct import pack
@@ -13,6 +13,9 @@ GMEM_MOVEABLE = 0x0002
 CF_BITMAP = 2
 CF_PALETTE = 9
 MEMORY_FORMATS = {1, 4, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17}
+REGISTERED_FORMAT_START = 0xC000
+OLE_OWNER_FORMATS = {"DataObject", "Ole Private Data"}
+VIRTUAL_FILE_FORMATS = {"FileContents", "FileGroupDescriptor", "FileGroupDescriptorW"}
 
 user = WinDLL("user32", use_last_error=True)
 core = WinDLL("kernel32", use_last_error=True)
@@ -25,6 +28,8 @@ user.EnumClipboardFormats.restype = wintypes.UINT
 user.GetClipboardSequenceNumber.restype = wintypes.DWORD
 user.GetClipboardData.argtypes = [wintypes.UINT]
 user.GetClipboardData.restype = wintypes.HANDLE
+user.GetClipboardFormatNameW.argtypes = [wintypes.UINT, wintypes.LPWSTR, wintypes.INT]
+user.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
 user.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
 user.SetClipboardData.restype = wintypes.HANDLE
 user.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
@@ -117,6 +122,8 @@ def copy_files(owner: int, files: tuple[Path, ...]) -> None:
 
 
 def snapshot(data: dict[int, int]) -> None:
+    has_file_drop = user.IsClipboardFormatAvailable(CF_HDROP)
+    name = create_unicode_buffer(256)
     fmt = 0
     while True:
         set_last_error(0)
@@ -124,8 +131,18 @@ def snapshot(data: dict[int, int]) -> None:
         if not fmt:
             if get_last_error():
                 raise WinError(get_last_error())
+            if has_file_drop and CF_HDROP not in data:
+                raise ValueError("无法备份剪贴板中的原文件路径。")
             return
-        if fmt not in MEMORY_FORMATS and fmt not in {CF_BITMAP, CF_PALETTE} and fmt < 0xC000:
+        if fmt >= REGISTERED_FORMAT_START:
+            if user.GetClipboardFormatNameW(fmt, name, len(name)):
+                # OLE's owner references cannot be reused by a different clipboard owner.
+                if name.value in OLE_OWNER_FORMATS:
+                    continue
+                # For actual files, CF_HDROP preserves the originals without a virtual file stream.
+                if has_file_drop and name.value in VIRTUAL_FILE_FORMATS:
+                    continue
+        elif fmt not in MEMORY_FORMATS and fmt not in {CF_BITMAP, CF_PALETTE}:
             raise ValueError("剪贴板包含无法安全恢复的格式。")
         source = user.GetClipboardData(fmt)
         handle = ole.OleDuplicateData(source, fmt, GMEM_MOVEABLE) if source else None

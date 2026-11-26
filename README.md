@@ -4,6 +4,8 @@
 
 下载后双击 `Codex-Image-Prep-Windows-x64.exe`，看到启动提示即可回到 Codex。无需安装 Python，也无需解压。EXE 控制在 10 MB 以内。再次双击同一个 EXE，确认后停止。[查看版本、ZIP 和校验值](https://github.com/shrice123/codex-image-preflight/releases/latest)
 
+更新时，先双击旧版并确认停止，再双击新版启动。v1.0.2 修复了从资源管理器复制图片文件后，按 Ctrl+V 时提示“无法备份当前剪贴板”的问题。
+
 ## 日常使用
 
 - 在 Windows Codex 桌面端按 **Ctrl+V** 粘贴截图或图片文件，也可以把本地图片从资源管理器直接拖到输入框。看到缩略图后照常发送。
